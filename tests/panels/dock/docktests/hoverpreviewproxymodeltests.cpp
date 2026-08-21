@@ -4,7 +4,6 @@
 
 #include <gtest/gtest.h>
 #include <QSignalSpy>
-#include <QAbstractItemModelTester>
 #include <memory>
 
 #include "hoverpreviewproxymodel.h"
