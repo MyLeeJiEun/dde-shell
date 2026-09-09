@@ -25,7 +25,7 @@ find_package(Qt${QT_VERSION_MAJOR} ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS
 
 include(GoogleTest)
 
-option(DOCK_BUILD_COVERAGE "Enable gcov coverage instrumentation for dock tests" OFF)
+option(DOCK_BUILD_COVERAGE "Enable gcov coverage instrumentation for dock tests" ON)
 
 # Common helper: coverage flags for a target (real sources only, not moc).
 function(dock_apply_coverage target)
@@ -35,9 +35,11 @@ function(dock_apply_coverage target)
     endif()
 endfunction()
 
-# Common helper: expose protected/private members as public in the test build.
+# Common helper: expose protected/private members for the test build without
+# the `#define private public` hack (which breaks gtest/libstdc++ <sstream>/<any>).
+# -fno-access-control is the GCC/Clang-sanctioned way to disable access checks.
 function(dock_expose_visibility target)
-    target_compile_definitions(${target} PRIVATE protected=public private=public)
+    target_compile_options(${target} PRIVATE -fno-access-control)
 endfunction()
 
 # ---------------------------------------------------------------------------
@@ -72,7 +74,7 @@ add_executable(hoverpreviewproxymodel_tests
 )
 
 target_include_directories(hoverpreviewproxymodel_tests PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/stubs
+    ${CMAKE_SOURCE_DIR}/frame
     ${CMAKE_SOURCE_DIR}/panels/dock/taskmanager
 )
 
@@ -82,6 +84,7 @@ target_link_libraries(hoverpreviewproxymodel_tests PRIVATE
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Test
+    Dtk${DTK_VERSION_MAJOR}::Core
 )
 
 dock_expose_visibility(hoverpreviewproxymodel_tests)
@@ -187,19 +190,19 @@ dock_apply_coverage(trayitempositionmanager_tests)
 gtest_discover_tests(trayitempositionmanager_tests)
 
 # ---------------------------------------------------------------------------
-# Coverage report target (output to build dir, generated code filtered out).
-# Generated moc/qrc/ui/qml code is not instrumented (AUTOMOC only runs on the
-# test executables; the non-Q_OBJECT OBJECT lib produces no moc), and lcov
-# filters any residual generated code as a fallback.
+# coverage: execute dock tests and generate coverage report (output to build
+# dir, generated code filtered out). Generated moc/qrc/ui/qml code is not
+# instrumented (AUTOMOC only runs on the test executables; the non-Q_OBJECT
+# OBJECT lib produces no moc), and lcov filters any residual generated code.
 # ---------------------------------------------------------------------------
-if(DOCK_BUILD_COVERAGE)
-    find_program(LCOV_BIN lcov)
-    find_program(GENHTML_BIN genhtml)
-    set(DOCK_COVERAGE_DIR ${CMAKE_BINARY_DIR}/coverage_report/dock)
-    set(DOCK_COVERAGE_INFO ${DOCK_COVERAGE_DIR}/dock_coverage.info)
-    set(DOCK_COVERAGE_FILTERED ${DOCK_COVERAGE_DIR}/dock_coverage_filtered.info)
-
-    add_custom_target(dock_coverage
+find_program(LCOV_BIN lcov)
+find_program(GENHTML_BIN genhtml)
+set(DOCK_COVERAGE_DIR ${CMAKE_BINARY_DIR}/coverage_report/dock)
+set(DOCK_COVERAGE_INFO ${DOCK_COVERAGE_DIR}/dock_coverage.info)
+set(DOCK_COVERAGE_FILTERED ${DOCK_COVERAGE_DIR}/dock_coverage_filtered.info)
+set(_run_test_coverage "")
+if(LCOV_BIN AND GENHTML_BIN)
+    set(_run_test_coverage
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DOCK_COVERAGE_DIR}
         COMMAND ${LCOV_BIN} --capture --directory ${CMAKE_BINARY_DIR}
                 --output-file ${DOCK_COVERAGE_INFO}
@@ -220,13 +223,20 @@ if(DOCK_BUILD_COVERAGE)
         COMMAND ${GENHTML_BIN} ${DOCK_COVERAGE_FILTERED}
                 --output-directory ${DOCK_COVERAGE_DIR}/html
                 --rc lcov_branch_coverage=1
-        DEPENDS
-            hoverpreviewproxymodel_tests
-            globalstests
-            dockiteminfo_tests
-            windowmanager_tests
-            trayitempositionmanager_tests
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        COMMENT "Generating dock coverage report in ${DOCK_COVERAGE_DIR}"
     )
 endif()
+add_custom_target(coverage
+    DEPENDS
+        hoverpreviewproxymodel_tests
+        globalstests
+        dockiteminfo_tests
+        windowmanager_tests
+        trayitempositionmanager_tests
+    COMMAND ${CMAKE_CTEST_COMMAND} --test-dir "${CMAKE_BINARY_DIR}"
+            -R "hoverpreviewproxymodel_tests|globalstests|dockiteminfo_tests|windowmanager_tests|trayitempositionmanager_tests"
+            --output-on-failure
+    ${_run_test_coverage}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Run dock unit tests and generate coverage report in ${DOCK_COVERAGE_DIR}"
+    VERBATIM
+)

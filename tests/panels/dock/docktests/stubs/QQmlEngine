@@ -9,6 +9,15 @@
 
 #pragma once
 
+// trayitempositionmanager.h relies on <QQmlEngine> transitively pulling in
+// <QObject>/<QList> (for the QObject base class and QList<QSize> member).
+// Since this stub replaces <QQmlEngine>, provide those transitive includes
+// explicitly; otherwise the header fails with "incomplete type QObject /
+// QList<QSize>" and moc errors (QMetaObject::Call not declared).
+#include <QObject>
+#include <QList>
+#include <QVariant>
+
 #ifndef QML_ELEMENT
 #define QML_ELEMENT
 #endif
