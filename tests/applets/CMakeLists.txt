@@ -45,7 +45,7 @@ find_package(Qt${QT_VERSION_MAJOR} ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Co
 
 include(GoogleTest)
 
-option(APPLETS_BUILD_COVERAGE "Enable gcov coverage instrumentation for dde-shell applets unit tests" OFF)
+option(APPLETS_BUILD_COVERAGE "Enable gcov coverage instrumentation for dde-shell applets unit tests" ON)
 
 # ---- OBJECT library: pure-logic applets/ sources under test -----------------
 add_library(applets_test_objects OBJECT
@@ -103,29 +103,32 @@ if(APPLETS_BUILD_COVERAGE)
         target_compile_options(${_t} PRIVATE -fprofile-arcs -ftest-coverage -O0 -g)
         target_link_options(${_t} PRIVATE -fprofile-arcs)
     endforeach()
-
-    find_program(LCOV_BIN lcov)
-    find_program(GENHTML_BIN genhtml)
-    if(LCOV_BIN AND GENHTML_BIN)
-        set(APPLETS_COVERAGE_DIR "${CMAKE_BINARY_DIR}/applets_coverage")
-        add_custom_target(applets_coverage
-            DEPENDS ${APPLETS_TEST_TARGETS}
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${APPLETS_COVERAGE_DIR}"
-            COMMAND ${CMAKE_CTEST_COMMAND} --test-dir "${CMAKE_BINARY_DIR}" -R "^applets_" --output-on-failure
-            COMMAND ${LCOV_BIN} --capture --directory "${CMAKE_BINARY_DIR}"
-                    --output-file "${APPLETS_COVERAGE_DIR}/applets.info"
-            COMMAND ${LCOV_BIN} --remove "${APPLETS_COVERAGE_DIR}/applets.info"
-                    '*/usr/include/*' '*/usr/lib/*' '*/3rdparty/*' '*/tests/*'
-                    '*/moc_*' '*/qrc_*' '*/_deps/*' '*_json.h'
-                    -o "${APPLETS_COVERAGE_DIR}/applets_filtered.info"
-            COMMAND ${GENHTML_BIN} "${APPLETS_COVERAGE_DIR}/applets_filtered.info"
-                    -o "${APPLETS_COVERAGE_DIR}/html" --branch-coverage
-            COMMAND ${CMAKE_COMMAND} -E echo "=== Applets coverage report: ${APPLETS_COVERAGE_DIR}/html/index.html ==="
-            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-            COMMENT "Run applets unit tests and generate lcov branch-coverage report"
-            VERBATIM
-        )
-    else()
-        message(WARNING "lcov or genhtml not found; 'applets_coverage' target not created.")
-    endif()
 endif()
+
+# ---- coverage: execute applets tests and generate coverage report ------------
+find_program(LCOV_BIN lcov)
+find_program(GENHTML_BIN genhtml)
+set(_run_test_coverage "")
+if(LCOV_BIN AND GENHTML_BIN)
+    set(APPLETS_COVERAGE_DIR "${CMAKE_BINARY_DIR}/applets_coverage")
+    set(_run_test_coverage
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${APPLETS_COVERAGE_DIR}"
+        COMMAND ${LCOV_BIN} --capture --directory "${CMAKE_BINARY_DIR}"
+                --output-file "${APPLETS_COVERAGE_DIR}/applets.info"
+        COMMAND ${LCOV_BIN} --remove "${APPLETS_COVERAGE_DIR}/applets.info"
+                '*/usr/include/*' '*/usr/lib/*' '*/3rdparty/*' '*/tests/*'
+                '*/moc_*' '*/qrc_*' '*/_deps/*' '*_json.h'
+                -o "${APPLETS_COVERAGE_DIR}/applets_filtered.info"
+        COMMAND ${GENHTML_BIN} "${APPLETS_COVERAGE_DIR}/applets_filtered.info"
+                -o "${APPLETS_COVERAGE_DIR}/html" --branch-coverage
+        COMMAND ${CMAKE_COMMAND} -E echo "=== Applets coverage report: ${APPLETS_COVERAGE_DIR}/html/index.html ==="
+    )
+endif()
+add_custom_target(coverage
+    DEPENDS ${APPLETS_TEST_TARGETS}
+    COMMAND ${CMAKE_CTEST_COMMAND} --test-dir "${CMAKE_BINARY_DIR}" -R "^applets_" --output-on-failure
+    ${_run_test_coverage}
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+    COMMENT "Run applets unit tests and generate lcov branch-coverage report"
+    VERBATIM
+)
