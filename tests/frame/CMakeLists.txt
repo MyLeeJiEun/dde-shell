@@ -33,7 +33,7 @@ find_package(Qt${QT_VERSION_MAJOR} ${REQUIRED_QT_VERSION} REQUIRED COMPONENTS Co
 
 include(GoogleTest)
 
-option(FRAME_BUILD_COVERAGE "Enable gcov coverage instrumentation for dde-shell frame unit tests" OFF)
+option(FRAME_BUILD_COVERAGE "Enable gcov coverage instrumentation for dde-shell frame unit tests" ON)
 
 # ---- OBJECT library: all frame/ sources under test, compiled once ------------
 # DS_LIB mirrors frame/CMakeLists.txt so the DS_SHARE export macro is correct
@@ -172,29 +172,32 @@ if(FRAME_BUILD_COVERAGE)
         target_compile_options(${_t} PRIVATE -fprofile-arcs -ftest-coverage -O0 -g)
         target_link_options(${_t} PRIVATE -fprofile-arcs)
     endforeach()
-
-    find_program(LCOV_BIN lcov)
-    find_program(GENHTML_BIN genhtml)
-    if(LCOV_BIN AND GENHTML_BIN)
-        set(FRAME_COVERAGE_DIR "${CMAKE_BINARY_DIR}/frame_coverage")
-        add_custom_target(frame_coverage
-            DEPENDS ${FRAME_TEST_TARGETS}
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${FRAME_COVERAGE_DIR}"
-            COMMAND ${CMAKE_CTEST_COMMAND} --test-dir "${CMAKE_BINARY_DIR}" -R "^frame_" --output-on-failure
-            COMMAND ${LCOV_BIN} --capture --directory "${CMAKE_BINARY_DIR}"
-                    --output-file "${FRAME_COVERAGE_DIR}/frame.info"
-            COMMAND ${LCOV_BIN} --remove "${FRAME_COVERAGE_DIR}/frame.info"
-                    '*/usr/include/*' '*/usr/lib/*' '*/3rdparty/*' '*/tests/*'
-                    '*/moc_*' '*/qrc_*' '*/_deps/*'
-                    -o "${FRAME_COVERAGE_DIR}/frame_filtered.info"
-            COMMAND ${GENHTML_BIN} "${FRAME_COVERAGE_DIR}/frame_filtered.info"
-                    -o "${FRAME_COVERAGE_DIR}/html" --branch-coverage
-            COMMAND ${CMAKE_COMMAND} -E echo "=== Frame coverage report: ${FRAME_COVERAGE_DIR}/html/index.html ==="
-            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-            COMMENT "Run frame unit tests and generate lcov branch-coverage report"
-            VERBATIM
-        )
-    else()
-        message(WARNING "lcov or genhtml not found; 'frame_coverage' target not created. Install the 'lcov' package to enable.")
-    endif()
 endif()
+
+# ---- coverage: execute frame tests and generate coverage report --------------
+find_program(LCOV_BIN lcov)
+find_program(GENHTML_BIN genhtml)
+set(_run_test_coverage "")
+if(LCOV_BIN AND GENHTML_BIN)
+    set(FRAME_COVERAGE_DIR "${CMAKE_BINARY_DIR}/frame_coverage")
+    set(_run_test_coverage
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${FRAME_COVERAGE_DIR}"
+        COMMAND ${LCOV_BIN} --capture --directory "${CMAKE_BINARY_DIR}"
+                --output-file "${FRAME_COVERAGE_DIR}/frame.info"
+        COMMAND ${LCOV_BIN} --remove "${FRAME_COVERAGE_DIR}/frame.info"
+                '*/usr/include/*' '*/usr/lib/*' '*/3rdparty/*' '*/tests/*'
+                '*/moc_*' '*/qrc_*' '*/_deps/*'
+                -o "${FRAME_COVERAGE_DIR}/frame_filtered.info"
+        COMMAND ${GENHTML_BIN} "${FRAME_COVERAGE_DIR}/frame_filtered.info"
+                -o "${FRAME_COVERAGE_DIR}/html" --branch-coverage
+        COMMAND ${CMAKE_COMMAND} -E echo "=== Frame coverage report: ${FRAME_COVERAGE_DIR}/html/index.html ==="
+    )
+endif()
+add_custom_target(coverage
+    DEPENDS ${FRAME_TEST_TARGETS}
+    COMMAND ${CMAKE_CTEST_COMMAND} --test-dir "${CMAKE_BINARY_DIR}" -R "^frame_" --output-on-failure
+    ${_run_test_coverage}
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+    COMMENT "Run frame unit tests and generate lcov branch-coverage report"
+    VERBATIM
+)
